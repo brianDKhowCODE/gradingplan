@@ -56,6 +56,7 @@
     letter-spacing:0.04em;
     margin-top:2px;
   }
+  .mode-stack{display:flex;flex-direction:column;align-items:flex-end;gap:6px;}
   .modes{
     display:flex;
     gap:6px;
@@ -77,6 +78,7 @@
     cursor:pointer;
     transition:background 0.15s, color 0.15s;
   }
+  .modes.units button{padding:5px 10px;font-size:10.5px;}
   .modes button.active{
     background:var(--ink);
     color:var(--paper);
@@ -109,12 +111,14 @@
     margin-bottom:10px;
     display:flex;
     justify-content:space-between;
+    gap:10px;
   }
-  svg{display:block;width:100%;height:auto;touch-action:none;}
+  #stage{display:block;width:100%;height:auto;touch-action:none;}
 
   .pt{cursor:grab;}
   .pt:active{cursor:grabbing;}
   .pt.selected{stroke:var(--mustard);stroke-width:3px;}
+  .pt.anchor{stroke:var(--teal);stroke-width:3px;}
 
   .rosette{position:absolute;bottom:14px;right:16px;opacity:0.55;}
 
@@ -181,6 +185,7 @@
     cursor:pointer;
   }
   .stepper button:hover{background:var(--rust);}
+  .stepper button:disabled, input:disabled{opacity:0.35;cursor:not-allowed;}
 
   .helper-btns{display:flex;flex-direction:column;gap:8px;}
   .helper-btns button{
@@ -196,6 +201,28 @@
     text-align:left;
   }
   .helper-btns button:hover{border-color:var(--ink);background:var(--paper);}
+  .helper-btns button.armed{border-color:var(--rust);color:var(--rust);background:var(--paper);}
+
+  .field-row{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:8px;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11.5px;
+    color:var(--ink-soft);
+  }
+  input[type=number]{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:12.5px;
+    background:var(--paper);
+    border:1px solid var(--line);
+    border-radius:4px;
+    color:var(--ink);
+    padding:6px 8px;
+    width:78px;
+  }
+  input[type=number]:focus{outline:none;border-color:var(--ink);}
 
   .instructions{
     font-size:12px;
@@ -211,12 +238,18 @@
   <header>
     <div class="title-block">
       <h1>GRADEPLAN</h1>
-      <div class="sub">site grading + cut/fill prototype — 20 ft grid</div>
+      <div class="sub" id="subtitle">site grading + cut/fill prototype</div>
     </div>
-    <div class="modes">
-      <button data-mode="existing" class="active">Existing</button>
-      <button data-mode="proposed">Proposed</button>
-      <button data-mode="cutfill">Cut / Fill</button>
+    <div class="mode-stack">
+      <div class="modes">
+        <button data-mode="existing" class="active">Existing</button>
+        <button data-mode="proposed">Proposed</button>
+        <button data-mode="cutfill">Cut / Fill</button>
+      </div>
+      <div class="modes units">
+        <button data-units="ft" class="active">ft</button>
+        <button data-units="m">m</button>
+      </div>
     </div>
   </header>
 
@@ -239,6 +272,12 @@
 
     <div class="panel">
       <div>
+        <h2>Grid setup</h2>
+        <div class="field-row"><span>Points per side</span><input type="number" id="gridN" min="3" max="10" step="1"></div>
+        <div class="field-row"><span>Spacing (<span id="spacingUnit">ft</span>)</span><input type="number" id="gridSpacing" min="1" step="1"></div>
+      </div>
+
+      <div>
         <h2>Earthwork</h2>
         <div class="stat-row"><span class="label">Cut</span><span class="val cut" id="statCut">0.0 cy</span></div>
         <div class="stat-row"><span class="label">Fill</span><span class="val fill" id="statFill">0.0 cy</span></div>
@@ -249,6 +288,10 @@
       <div>
         <h2>Selected point</h2>
         <div class="selected-readout" id="readout">Click a point on the grid to select it.</div>
+        <div class="field-row" style="margin-top:8px;">
+          <span>Set elevation (<span id="elevUnit">ft</span>)</span>
+          <input type="number" id="elevInput" step="0.1">
+        </div>
         <div class="stepper">
           <button id="stepDown">−0.5 ft</button>
           <button id="stepUp">+0.5 ft</button>
@@ -260,6 +303,9 @@
         <div class="helper-btns">
           <button id="btnFlatten">Flatten center pad (proposed)</button>
           <button id="btnReset">Reset proposed = existing</button>
+          <button id="btnSlope">Set slope (pick 2 points)</button>
+          <div class="field-row"><span>Swale depth (<span id="swaleUnit">ft</span>)</span><input type="number" id="swaleDepth" min="0.1" step="0.1"></div>
+          <button id="btnSwale">Cut swale (pick 2 points)</button>
         </div>
       </div>
 
@@ -269,8 +315,10 @@
       </div>
 
       <div class="instructions">
-        <b>Existing / Proposed</b> — drag any point up or down to sculpt that surface.<br>
-        <b>Cut / Fill</b> — compares the two surfaces cell by cell. Rust means material removed, teal means material added.
+        <b>Existing / Proposed</b> — drag a point, use the stepper, or type an exact elevation to sculpt that surface.<br>
+        <b>Slope / Swale</b> — click two points in the same row, column, or diagonal on the proposed surface to lay in a straight slope or a drainage swale between them. Esc cancels.<br>
+        <b>Cut / Fill</b> — triangulates each cell (two triangles) to compare surfaces. Rust means material removed, teal means material added.<br>
+        <b>Grid setup</b> — change point density or spacing; existing/proposed data is resampled to fit.
       </div>
     </div>
   </main>
@@ -278,11 +326,15 @@
 
 <script>
 // ---------- grid setup ----------
-const N = 6; // points per side -> 5x5 cells
-const CELL_FT = 20; // real-world spacing per cell
+let N = 6; // points per side -> (N-1)x(N-1) cells
+let CELL_FT = 20; // real-world spacing per cell, canonical feet
 const SVG_SIZE = 560;
 const MARGIN = 40;
-const STEP = (SVG_SIZE - MARGIN*2) / (N-1);
+const FT_PER_M = 3.28084;
+
+function stepPx(){ return (SVG_SIZE - MARGIN*2) / (N-1); }
+function px(i){ return MARGIN + i*stepPx(); }
+function py(j){ return MARGIN + j*stepPx(); }
 
 function makeExisting(){
   const g = [];
@@ -298,19 +350,78 @@ function makeExisting(){
   return g;
 }
 
+function resampleGrid(grid, oldN, newN){
+  const out = [];
+  for(let j=0;j<newN;j++){
+    const row = [];
+    const v = newN===1 ? 0 : (j/(newN-1))*(oldN-1);
+    const j0 = Math.floor(v), j1 = Math.min(oldN-1, j0+1), jf = v-j0;
+    for(let i=0;i<newN;i++){
+      const u = newN===1 ? 0 : (i/(newN-1))*(oldN-1);
+      const i0 = Math.floor(u), i1 = Math.min(oldN-1, i0+1), uf = u-i0;
+      const a = grid[j0][i0], b = grid[j0][i1], c = grid[j1][i0], d = grid[j1][i1];
+      const top = a + (b-a)*uf, bot = c + (d-c)*uf;
+      row.push(Math.round((top + (bot-top)*jf)*2)/2);
+    }
+    out.push(row);
+  }
+  return out;
+}
+
+let units = 'ft'; // 'ft' | 'm'
+let swaleDepthFt = 1.5;
 let existing = makeExisting();
 let proposed = existing.map(r=>r.slice());
 let mode = "existing";
 let selected = null; // {i,j}
+let armedTool = null; // 'slope' | 'swale' | null
+let toolAnchor = null; // {i,j}
+
+// ---------- units ----------
+function unitLabel(){ return units==='ft' ? 'ft' : 'm'; }
+function toDispLen(ft){ return units==='ft' ? ft : ft/FT_PER_M; }
+function fromDispLen(v){ return units==='ft' ? v : v*FT_PER_M; }
+function dispLen(ft){ return toDispLen(ft).toFixed(units==='ft'?1:2); }
+function unitVolLabel(){ return units==='ft' ? 'cy' : 'm³'; }
+function volDispValue(cf){ return units==='ft' ? cf/27 : cf*0.0283168466; }
+
+// ---------- persistence ----------
+const STORAGE_KEY = 'gradeplan_v1';
+function saveState(){
+  try{
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({N, CELL_FT, units, swaleDepthFt, existing, proposed}));
+  }catch(e){ /* storage unavailable */ }
+}
+function loadState(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(!raw) return false;
+    const s = JSON.parse(raw);
+    if(!s || !Array.isArray(s.existing) || !Array.isArray(s.proposed)) return false;
+    N = s.N || N;
+    CELL_FT = s.CELL_FT || CELL_FT;
+    units = s.units || units;
+    swaleDepthFt = s.swaleDepthFt || swaleDepthFt;
+    existing = s.existing;
+    proposed = s.proposed;
+    return true;
+  }catch(e){ return false; }
+}
+loadState();
 
 const svg = document.getElementById('stage');
 const modeCaption = document.getElementById('modeCaption');
 const selCaption = document.getElementById('selCaption');
 const readout = document.getElementById('readout');
 const legendBox = document.getElementById('legendBox');
-
-function px(i){ return MARGIN + i*STEP; }
-function py(j){ return MARGIN + j*STEP; }
+const elGridN = document.getElementById('gridN');
+const elGridSpacing = document.getElementById('gridSpacing');
+const elElevInput = document.getElementById('elevInput');
+const elSwaleDepth = document.getElementById('swaleDepth');
+const elStepDown = document.getElementById('stepDown');
+const elStepUp = document.getElementById('stepUp');
+const elBtnSlope = document.getElementById('btnSlope');
+const elBtnSwale = document.getElementById('btnSwale');
 
 function elevColor(e, lo, hi){
   // hypsometric-ish scale: teal-green low -> mustard mid -> rust high
@@ -332,6 +443,78 @@ function gridBounds(g){
   let lo=Infinity, hi=-Infinity;
   g.forEach(row=>row.forEach(v=>{lo=Math.min(lo,v);hi=Math.max(hi,v);}));
   return [lo,hi];
+}
+
+// ---------- alignment helper for slope/swale tools ----------
+function alignedPath(a,b){
+  const di = Math.sign(b.i-a.i), dj = Math.sign(b.j-a.j);
+  if(a.i!==b.i && a.j!==b.j && Math.abs(b.i-a.i)!==Math.abs(b.j-a.j)) return null;
+  const steps = Math.max(Math.abs(b.i-a.i), Math.abs(b.j-a.j));
+  const pts = [];
+  for(let s=0;s<=steps;s++) pts.push({i:a.i+di*s, j:a.j+dj*s});
+  return pts;
+}
+
+function applySlope(path){
+  const startVal = proposed[path[0].j][path[0].i];
+  const endVal = proposed[path[path.length-1].j][path[path.length-1].i];
+  const n = path.length-1;
+  for(let s=1;s<n;s++){
+    const t = s/n;
+    proposed[path[s].j][path[s].i] = Math.round((startVal + (endVal-startVal)*t)*10)/10;
+  }
+}
+
+function applySwale(path, depthFt){
+  const startVal = proposed[path[0].j][path[0].i];
+  const endVal = proposed[path[path.length-1].j][path[path.length-1].i];
+  const n = path.length-1;
+  for(let s=0;s<=n;s++){
+    const t = n===0 ? 0 : s/n;
+    const base = startVal + (endVal-startVal)*t;
+    const dip = depthFt * Math.sin(Math.PI*t);
+    proposed[path[s].j][path[s].i] = Math.round((base-dip)*10)/10;
+  }
+}
+
+function handleToolPick(i,j){
+  if(!toolAnchor){
+    toolAnchor = {i,j};
+    render();
+    return;
+  }
+  if(toolAnchor.i===i && toolAnchor.j===j){
+    toolAnchor = null;
+    render();
+    return;
+  }
+  const path = alignedPath(toolAnchor, {i,j});
+  if(!path){
+    alert('Pick two points in the same row, column, or diagonal.');
+    return;
+  }
+  if(armedTool==='slope') applySlope(path);
+  else if(armedTool==='swale') applySwale(path, swaleDepthFt);
+  armedTool = null;
+  toolAnchor = null;
+  selected = null;
+  render();
+}
+
+function armTool(name){
+  if(armedTool === name){
+    armedTool = null;
+    toolAnchor = null;
+  } else {
+    armedTool = name;
+    toolAnchor = null;
+    selected = null;
+    if(mode !== 'proposed'){
+      mode = 'proposed';
+      document.querySelectorAll('button[data-mode]').forEach(b=>b.classList.toggle('active', b.dataset.mode==='proposed'));
+    }
+  }
+  render();
 }
 
 // ---------- marching squares ----------
@@ -365,9 +548,10 @@ function marchingSquares(grid, level){
 
 function contourLevels(g){
   const [lo,hi] = gridBounds(g);
+  const interval = units==='ft' ? 1 : 0.5*FT_PER_M;
   const levels = [];
-  const start = Math.ceil(lo);
-  for(let l=start; l<=hi; l+=1) levels.push(l);
+  const start = Math.ceil(lo/interval)*interval;
+  for(let l=start; l<=hi; l+=interval) levels.push(l);
   return levels;
 }
 
@@ -379,25 +563,30 @@ function render(){
   svg.appendChild(g);
 
   if(mode === 'cutfill'){
-    modeCaption.textContent = 'Comparing existing (dashed) to proposed (solid) — colored by cut/fill depth';
-    const [loE,hiE] = gridBounds(existing);
-    const [loP,hiP] = gridBounds(proposed);
-    const lo = Math.min(loE,loP), hi = Math.max(hiE,hiP);
+    modeCaption.textContent = 'Comparing existing (dashed) to proposed (solid) — triangulated cut/fill depth';
     const maxDiff = Math.max(1, ...existing.flatMap((row,j)=>row.map((v,i)=>Math.abs(v-proposed[j][i]))));
 
-    // cell tint by average corner diff
+    // per-triangle tint, matching the stats' triangulation
     for(let j=0;j<N-1;j++){
       for(let i=0;i<N-1;i++){
-        const corners = [[i,j],[i+1,j],[i,j+1],[i+1,j+1]];
-        const diff = corners.reduce((s,[ci,cj])=> s+(existing[cj][ci]-proposed[cj][ci]),0)/4;
-        const t = Math.min(1, Math.abs(diff)/maxDiff);
-        const color = diff > 0 ? '181,80,45' : '44,120,115'; // rust cut, teal fill
-        const rect = document.createElementNS(ns,'rect');
-        rect.setAttribute('x', px(i)); rect.setAttribute('y', py(j));
-        rect.setAttribute('width', STEP); rect.setAttribute('height', STEP);
-        rect.setAttribute('fill', `rgba(${color},${0.12+t*0.55})`);
-        rect.setAttribute('stroke', 'rgba(36,49,41,0.08)');
-        g.appendChild(rect);
+        const TL=[px(i),py(j)], TR=[px(i+1),py(j)], BL=[px(i),py(j+1)], BR=[px(i+1),py(j+1)];
+        const dTL = existing[j][i]-proposed[j][i];
+        const dTR = existing[j][i+1]-proposed[j][i+1];
+        const dBL = existing[j+1][i]-proposed[j+1][i];
+        const dBR = existing[j+1][i+1]-proposed[j+1][i+1];
+        const tris = [
+          {pts:[TL,TR,BR], avg:(dTL+dTR+dBR)/3},
+          {pts:[TL,BR,BL], avg:(dTL+dBR+dBL)/3}
+        ];
+        tris.forEach(({pts,avg})=>{
+          const t = Math.min(1, Math.abs(avg)/maxDiff);
+          const color = avg > 0 ? '181,80,45' : '44,120,115';
+          const poly = document.createElementNS(ns,'polygon');
+          poly.setAttribute('points', pts.map(p=>p.join(',')).join(' '));
+          poly.setAttribute('fill', `rgba(${color},${0.12+t*0.55})`);
+          poly.setAttribute('stroke', 'rgba(36,49,41,0.08)');
+          g.appendChild(poly);
+        });
       }
     }
 
@@ -432,9 +621,16 @@ function render(){
     selCaption.textContent = '';
   } else {
     const g_ = mode === 'existing' ? existing : proposed;
-    modeCaption.textContent = mode === 'existing'
-      ? 'Editing existing terrain — drag a point vertically to change elevation'
-      : 'Editing proposed grading — drag a point vertically to change elevation';
+    if(armedTool){
+      const toolName = armedTool==='slope' ? 'Slope' : 'Swale';
+      modeCaption.textContent = toolAnchor
+        ? `${toolName} tool — click the end point (same row, column, or diagonal)`
+        : `${toolName} tool — click the start point`;
+    } else {
+      modeCaption.textContent = mode === 'existing'
+        ? 'Editing existing terrain — drag a point vertically to change elevation'
+        : 'Editing proposed grading — drag a point vertically to change elevation';
+    }
     const [lo,hi] = gridBounds(g_);
 
     // grid lines
@@ -479,6 +675,7 @@ function render(){
         c.setAttribute('stroke-width', '1.5');
         c.classList.add('pt');
         if(selected && selected.i===i && selected.j===j) c.classList.add('selected');
+        if(toolAnchor && toolAnchor.i===i && toolAnchor.j===j) c.classList.add('anchor');
         c.dataset.i = i; c.dataset.j = j;
         c.addEventListener('mousedown', startDrag);
         c.addEventListener('touchstart', startDrag, {passive:false});
@@ -487,15 +684,17 @@ function render(){
     }
 
     legendBox.innerHTML = `
-      <div><span class="swatch" style="background:${elevColor(lo,lo,hi)}"></span>Low — ${lo.toFixed(1)} ft</div>
+      <div><span class="swatch" style="background:${elevColor(lo,lo,hi)}"></span>Low — ${dispLen(lo)} ${unitLabel()}</div>
       <div><span class="swatch" style="background:${elevColor((lo+hi)/2,lo,hi)}"></span>Mid</div>
-      <div><span class="swatch" style="background:${elevColor(hi,lo,hi)}"></span>High — ${hi.toFixed(1)} ft</div>
+      <div><span class="swatch" style="background:${elevColor(hi,lo,hi)}"></span>High — ${dispLen(hi)} ${unitLabel()}</div>
     `;
     selCaption.textContent = selected ? `point (${selected.i},${selected.j})` : '';
   }
 
   updateReadout();
   updateStats();
+  updateFormFields();
+  saveState();
 }
 
 // ---------- dragging ----------
@@ -503,6 +702,10 @@ let dragging = null;
 function startDrag(evt){
   evt.preventDefault();
   const i = +evt.currentTarget.dataset.i, j = +evt.currentTarget.dataset.j;
+  if(armedTool){
+    handleToolPick(i,j);
+    return;
+  }
   selected = {i,j};
   if(mode !== 'cutfill'){
     dragging = { i, j, startY: (evt.touches? evt.touches[0].clientY : evt.clientY),
@@ -536,65 +739,171 @@ function endDrag(){
 // ---------- stats ----------
 function updateStats(){
   const cellArea = CELL_FT*CELL_FT; // sq ft
-  let cutVol=0, fillVol=0;
+  const triArea = cellArea/2;
+  let cutVolCF=0, fillVolCF=0;
   for(let j=0;j<N-1;j++){
     for(let i=0;i<N-1;i++){
-      const corners=[[i,j],[i+1,j],[i,j+1],[i+1,j+1]];
-      const diff = corners.reduce((s,[ci,cj])=> s+(existing[cj][ci]-proposed[cj][ci]),0)/4;
-      const vol = diff*cellArea; // cu ft, +cut / -fill
-      if(vol>0) cutVol += vol; else fillVol += -vol;
+      const dTL = existing[j][i]-proposed[j][i];
+      const dTR = existing[j][i+1]-proposed[j][i+1];
+      const dBL = existing[j+1][i]-proposed[j+1][i];
+      const dBR = existing[j+1][i+1]-proposed[j+1][i+1];
+      // split the cell into two triangles (shared TL–BR diagonal) so mixed
+      // cut/fill within one cell (saddle points) isn't averaged away
+      const tri1 = (dTL+dTR+dBR)/3;
+      const tri2 = (dTL+dBR+dBL)/3;
+      [tri1, tri2].forEach(avg=>{
+        const vol = avg*triArea;
+        if(vol>0) cutVolCF += vol; else fillVolCF += -vol;
+      });
     }
   }
-  const cutCY = cutVol/27, fillCY = fillVol/27;
-  document.getElementById('statCut').textContent = cutCY.toFixed(1)+' cy';
-  document.getElementById('statFill').textContent = fillCY.toFixed(1)+' cy';
-  const net = cutCY - fillCY;
+  const cutDisp = volDispValue(cutVolCF), fillDisp = volDispValue(fillVolCF);
+  const netDisp = cutDisp - fillDisp;
+  document.getElementById('statCut').textContent = cutDisp.toFixed(1)+' '+unitVolLabel();
+  document.getElementById('statFill').textContent = fillDisp.toFixed(1)+' '+unitVolLabel();
   const netEl = document.getElementById('statNet');
-  netEl.textContent = (net>=0?'+':'')+net.toFixed(1)+' cy';
-  netEl.style.color = Math.abs(net)<0.5 ? 'var(--ink)' : (net>0?'var(--rust)':'var(--teal)');
+  netEl.textContent = (netDisp>=0?'+':'')+netDisp.toFixed(1)+' '+unitVolLabel();
+  const netCY = (cutVolCF-fillVolCF)/27;
+  netEl.style.color = Math.abs(netCY)<0.5 ? 'var(--ink)' : (netDisp>0?'var(--rust)':'var(--teal)');
 }
 
 function updateReadout(){
-  if(!selected){ readout.innerHTML = 'Click a point on the grid to select it.'; return; }
+  const disabled = !selected || mode==='cutfill';
+  elElevInput.disabled = disabled;
+  elStepDown.disabled = disabled;
+  elStepUp.disabled = disabled;
+  if(!selected){
+    readout.innerHTML = 'Click a point on the grid to select it.';
+    if(document.activeElement !== elElevInput) elElevInput.value = '';
+    return;
+  }
   const {i,j} = selected;
-  readout.innerHTML = `Point (${i}, ${j})<br>Existing: <b>${existing[j][i].toFixed(1)} ft</b><br>Proposed: <b>${proposed[j][i].toFixed(1)} ft</b>`;
+  readout.innerHTML = `Point (${i}, ${j})<br>Existing: <b>${dispLen(existing[j][i])} ${unitLabel()}</b><br>Proposed: <b>${dispLen(proposed[j][i])} ${unitLabel()}</b>`;
+  if(mode!=='cutfill' && document.activeElement !== elElevInput){
+    const gv = mode==='existing' ? existing : proposed;
+    elElevInput.value = toDispLen(gv[j][i]).toFixed(units==='ft'?1:2);
+  }
+}
+
+function updateFormFields(){
+  document.getElementById('subtitle').textContent =
+    `site grading + cut/fill prototype — ${N}×${N} grid @ ${toDispLen(CELL_FT).toFixed(units==='ft'?0:1)} ${unitLabel()} spacing`;
+  document.getElementById('spacingUnit').textContent = unitLabel();
+  document.getElementById('elevUnit').textContent = unitLabel();
+  document.getElementById('swaleUnit').textContent = unitLabel();
+
+  if(document.activeElement !== elGridN) elGridN.value = N;
+  if(document.activeElement !== elGridSpacing) elGridSpacing.value = toDispLen(CELL_FT).toFixed(units==='ft'?0:1);
+  if(document.activeElement !== elSwaleDepth) elSwaleDepth.value = toDispLen(swaleDepthFt).toFixed(units==='ft'?1:2);
+
+  const stepAmt = units==='ft' ? 0.5 : 0.1;
+  elStepDown.textContent = `−${stepAmt} ${unitLabel()}`;
+  elStepUp.textContent = `+${stepAmt} ${unitLabel()}`;
+
+  elBtnSlope.classList.toggle('armed', armedTool==='slope');
+  elBtnSlope.textContent = armedTool==='slope' ? 'Cancel slope tool' : 'Set slope (pick 2 points)';
+  elBtnSwale.classList.toggle('armed', armedTool==='swale');
+  elBtnSwale.textContent = armedTool==='swale' ? 'Cancel swale tool' : 'Cut swale (pick 2 points)';
 }
 
 // ---------- controls ----------
-document.querySelectorAll('.modes button').forEach(btn=>{
+document.querySelectorAll('button[data-mode]').forEach(btn=>{
   btn.addEventListener('click', ()=>{
-    document.querySelectorAll('.modes button').forEach(b=>b.classList.remove('active'));
+    armedTool = null; toolAnchor = null;
+    document.querySelectorAll('button[data-mode]').forEach(b=>b.classList.remove('active'));
     btn.classList.add('active');
     mode = btn.dataset.mode;
     render();
   });
 });
 
-document.getElementById('stepUp').addEventListener('click', ()=>{
+document.querySelectorAll('button[data-units]').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    if(btn.dataset.units === units) return;
+    units = btn.dataset.units;
+    document.querySelectorAll('button[data-units]').forEach(b=>b.classList.toggle('active', b===btn));
+    render();
+  });
+});
+
+elStepUp.addEventListener('click', ()=>{
   if(!selected || mode==='cutfill') return;
+  const deltaFt = units==='ft' ? 0.5 : 0.1*FT_PER_M;
   const g_ = mode==='existing'?existing:proposed;
-  g_[selected.j][selected.i] = Math.min(20, g_[selected.j][selected.i]+0.5);
+  g_[selected.j][selected.i] = Math.min(20, g_[selected.j][selected.i]+deltaFt);
   render();
 });
-document.getElementById('stepDown').addEventListener('click', ()=>{
+elStepDown.addEventListener('click', ()=>{
   if(!selected || mode==='cutfill') return;
+  const deltaFt = units==='ft' ? 0.5 : 0.1*FT_PER_M;
   const g_ = mode==='existing'?existing:proposed;
-  g_[selected.j][selected.i] = Math.max(-10, g_[selected.j][selected.i]-0.5);
+  g_[selected.j][selected.i] = Math.max(-10, g_[selected.j][selected.i]-deltaFt);
   render();
 });
 
+elElevInput.addEventListener('change', ()=>{
+  if(!selected || mode==='cutfill') return;
+  const v = parseFloat(elElevInput.value);
+  if(Number.isNaN(v)){ render(); return; }
+  const ftVal = Math.max(-10, Math.min(20, fromDispLen(v)));
+  const g_ = mode==='existing'?existing:proposed;
+  g_[selected.j][selected.i] = Math.round(ftVal*10)/10;
+  render();
+});
+elElevInput.addEventListener('keydown', e=>{ if(e.key==='Enter') e.target.blur(); });
+
+elGridN.addEventListener('change', ()=>{
+  let newN = Math.round(parseFloat(elGridN.value));
+  if(Number.isNaN(newN)) newN = N;
+  newN = Math.max(3, Math.min(10, newN));
+  if(newN !== N){
+    existing = resampleGrid(existing, N, newN);
+    proposed = resampleGrid(proposed, N, newN);
+    N = newN;
+    selected = null;
+    armedTool = null; toolAnchor = null;
+  }
+  render();
+});
+elGridN.addEventListener('keydown', e=>{ if(e.key==='Enter') e.target.blur(); });
+
+elGridSpacing.addEventListener('change', ()=>{
+  const v = parseFloat(elGridSpacing.value);
+  if(!Number.isNaN(v) && v>0) CELL_FT = fromDispLen(v);
+  render();
+});
+elGridSpacing.addEventListener('keydown', e=>{ if(e.key==='Enter') e.target.blur(); });
+
+elSwaleDepth.addEventListener('change', ()=>{
+  const v = parseFloat(elSwaleDepth.value);
+  if(!Number.isNaN(v) && v>0) swaleDepthFt = fromDispLen(v);
+  render();
+});
+elSwaleDepth.addEventListener('keydown', e=>{ if(e.key==='Enter') e.target.blur(); });
+
 document.getElementById('btnFlatten').addEventListener('click', ()=>{
+  armedTool = null; toolAnchor = null;
   const target = existing[Math.floor(N/2)][Math.floor(N/2)];
   for(let j=1;j<N-1;j++){
     for(let i=1;i<N-1;i++){
       proposed[j][i] = target;
     }
   }
-  if(mode==='proposed'||mode==='cutfill') render(); else render();
+  render();
 });
 document.getElementById('btnReset').addEventListener('click', ()=>{
+  armedTool = null; toolAnchor = null;
   proposed = existing.map(r=>r.slice());
   render();
+});
+elBtnSlope.addEventListener('click', ()=> armTool('slope'));
+elBtnSwale.addEventListener('click', ()=> armTool('swale'));
+
+window.addEventListener('keydown', e=>{
+  if(e.key==='Escape' && armedTool){
+    armedTool = null; toolAnchor = null;
+    render();
+  }
 });
 
 render();
