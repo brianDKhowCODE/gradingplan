@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>GRADEPLAN — site grading prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#EDE7D8;
+    --panel:#F7F3E8;
+    --ink:#243129;
+    --ink-soft:#5B6459;
+    --rust:#B5502D;
+    --teal:#2C7873;
+    --mustard:#C9973A;
+    --gridline:#D9D0BA;
+    --line:#C9BF9E;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--paper);
+    background-image:
+      linear-gradient(var(--gridline) 1px, transparent 1px),
+      linear-gradient(90deg, var(--gridline) 1px, transparent 1px);
+    background-size:28px 28px;
+    color:var(--ink);
+    font-family:'IBM Plex Sans', sans-serif;
+    min-height:100vh;
+    padding:20px;
+  }
+  .wrap{max-width:1040px;margin:0 auto;}
+
+  header{
+    display:flex;
+    align-items:flex-end;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    gap:14px;
+    border-bottom:2px solid var(--ink);
+    padding-bottom:14px;
+    margin-bottom:20px;
+  }
+  .title-block h1{
+    font-family:'Space Grotesk', sans-serif;
+    font-size:26px;
+    font-weight:700;
+    letter-spacing:0.02em;
+    margin:0;
+  }
+  .title-block .sub{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:12px;
+    color:var(--ink-soft);
+    letter-spacing:0.04em;
+    margin-top:2px;
+  }
+  .modes{
+    display:flex;
+    gap:6px;
+    background:var(--panel);
+    border:1px solid var(--line);
+    padding:4px;
+    border-radius:6px;
+  }
+  .modes button{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:12px;
+    letter-spacing:0.03em;
+    text-transform:uppercase;
+    border:none;
+    background:transparent;
+    color:var(--ink-soft);
+    padding:8px 14px;
+    border-radius:4px;
+    cursor:pointer;
+    transition:background 0.15s, color 0.15s;
+  }
+  .modes button.active{
+    background:var(--ink);
+    color:var(--paper);
+  }
+  .modes button:not(.active):hover{
+    background:var(--gridline);
+  }
+
+  main{
+    display:grid;
+    grid-template-columns:1fr 300px;
+    gap:22px;
+  }
+  @media (max-width:760px){
+    main{grid-template-columns:1fr;}
+  }
+
+  .canvas-card{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:8px;
+    padding:16px;
+    position:relative;
+  }
+  .canvas-card .cap{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px;
+    color:var(--ink-soft);
+    letter-spacing:0.03em;
+    margin-bottom:10px;
+    display:flex;
+    justify-content:space-between;
+  }
+  svg{display:block;width:100%;height:auto;touch-action:none;}
+
+  .pt{cursor:grab;}
+  .pt:active{cursor:grabbing;}
+  .pt.selected{stroke:var(--mustard);stroke-width:3px;}
+
+  .rosette{position:absolute;bottom:14px;right:16px;opacity:0.55;}
+
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:8px;
+    padding:18px;
+    display:flex;
+    flex-direction:column;
+    gap:16px;
+    height:fit-content;
+  }
+  .panel h2{
+    font-family:'Space Grotesk', sans-serif;
+    font-size:13px;
+    text-transform:uppercase;
+    letter-spacing:0.06em;
+    margin:0 0 6px 0;
+    color:var(--ink-soft);
+    border-bottom:1px solid var(--line);
+    padding-bottom:8px;
+  }
+
+  .stat-row{
+    display:flex;
+    justify-content:space-between;
+    align-items:baseline;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:13px;
+    padding:4px 0;
+  }
+  .stat-row .label{color:var(--ink-soft);}
+  .stat-row .val{font-size:16px;font-weight:600;}
+  .val.cut{color:var(--rust);}
+  .val.fill{color:var(--teal);}
+
+  .divider{height:1px;background:var(--line);margin:2px 0;}
+
+  .legend{display:flex;flex-direction:column;gap:6px;font-family:'IBM Plex Mono', monospace;font-size:11px;color:var(--ink-soft);}
+  .legend .swatch{display:inline-block;width:12px;height:12px;border-radius:2px;margin-right:8px;vertical-align:-1px;}
+
+  .selected-readout{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:12px;
+    color:var(--ink-soft);
+    background:var(--paper);
+    border:1px dashed var(--line);
+    border-radius:6px;
+    padding:10px 12px;
+    line-height:1.6;
+  }
+  .selected-readout b{color:var(--ink);font-size:15px;}
+  .stepper{display:flex;gap:6px;margin-top:8px;}
+  .stepper button{
+    flex:1;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:13px;
+    background:var(--ink);
+    color:var(--paper);
+    border:none;
+    border-radius:4px;
+    padding:7px 0;
+    cursor:pointer;
+  }
+  .stepper button:hover{background:var(--rust);}
+
+  .helper-btns{display:flex;flex-direction:column;gap:8px;}
+  .helper-btns button{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11.5px;
+    letter-spacing:0.02em;
+    background:transparent;
+    border:1px solid var(--line);
+    color:var(--ink);
+    padding:8px 10px;
+    border-radius:5px;
+    cursor:pointer;
+    text-align:left;
+  }
+  .helper-btns button:hover{border-color:var(--ink);background:var(--paper);}
+
+  .instructions{
+    font-size:12px;
+    line-height:1.6;
+    color:var(--ink-soft);
+  }
+  .instructions b{color:var(--ink);}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="title-block">
+      <h1>GRADEPLAN</h1>
+      <div class="sub">site grading + cut/fill prototype — 20 ft grid</div>
+    </div>
+    <div class="modes">
+      <button data-mode="existing" class="active">Existing</button>
+      <button data-mode="proposed">Proposed</button>
+      <button data-mode="cutfill">Cut / Fill</button>
+    </div>
+  </header>
+
+  <main>
+    <div class="canvas-card">
+      <div class="cap">
+        <span id="modeCaption">Editing existing terrain — drag a point vertically to change elevation</span>
+        <span id="selCaption"></span>
+      </div>
+      <svg id="stage" viewBox="0 0 560 560"></svg>
+      <svg class="rosette" width="46" height="46" viewBox="0 0 46 46">
+        <circle cx="23" cy="23" r="21" fill="none" stroke="#243129" stroke-width="1"/>
+        <circle cx="23" cy="23" r="2" fill="#243129"/>
+        <line x1="23" y1="2" x2="23" y2="10" stroke="#243129" stroke-width="1"/>
+        <line x1="23" y1="36" x2="23" y2="44" stroke="#243129" stroke-width="1"/>
+        <line x1="2" y1="23" x2="10" y2="23" stroke="#243129" stroke-width="1"/>
+        <line x1="36" y1="23" x2="44" y2="23" stroke="#243129" stroke-width="1"/>
+      </svg>
+    </div>
+
+    <div class="panel">
+      <div>
+        <h2>Earthwork</h2>
+        <div class="stat-row"><span class="label">Cut</span><span class="val cut" id="statCut">0.0 cy</span></div>
+        <div class="stat-row"><span class="label">Fill</span><span class="val fill" id="statFill">0.0 cy</span></div>
+        <div class="divider"></div>
+        <div class="stat-row"><span class="label">Net</span><span class="val" id="statNet">0.0 cy</span></div>
+      </div>
+
+      <div>
+        <h2>Selected point</h2>
+        <div class="selected-readout" id="readout">Click a point on the grid to select it.</div>
+        <div class="stepper">
+          <button id="stepDown">−0.5 ft</button>
+          <button id="stepUp">+0.5 ft</button>
+        </div>
+      </div>
+
+      <div>
+        <h2>Quick actions</h2>
+        <div class="helper-btns">
+          <button id="btnFlatten">Flatten center pad (proposed)</button>
+          <button id="btnReset">Reset proposed = existing</button>
+        </div>
+      </div>
+
+      <div>
+        <h2>Legend</h2>
+        <div class="legend" id="legendBox"></div>
+      </div>
+
+      <div class="instructions">
+        <b>Existing / Proposed</b> — drag any point up or down to sculpt that surface.<br>
+        <b>Cut / Fill</b> — compares the two surfaces cell by cell. Rust means material removed, teal means material added.
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+// ---------- grid setup ----------
+const N = 6; // points per side -> 5x5 cells
+const CELL_FT = 20; // real-world spacing per cell
+const SVG_SIZE = 560;
+const MARGIN = 40;
+const STEP = (SVG_SIZE - MARGIN*2) / (N-1);
+
+function makeExisting(){
+  const g = [];
+  for(let j=0;j<N;j++){
+    const row = [];
+    for(let i=0;i<N;i++){
+      let e = 8 - i*1.1 - j*0.7;
+      e += Math.sin(i*0.9)*0.4 + Math.cos(j*0.7)*0.3;
+      row.push(Math.round(e*2)/2);
+    }
+    g.push(row);
+  }
+  return g;
+}
+
+let existing = makeExisting();
+let proposed = existing.map(r=>r.slice());
+let mode = "existing";
+let selected = null; // {i,j}
+
+const svg = document.getElementById('stage');
+const modeCaption = document.getElementById('modeCaption');
+const selCaption = document.getElementById('selCaption');
+const readout = document.getElementById('readout');
+const legendBox = document.getElementById('legendBox');
+
+function px(i){ return MARGIN + i*STEP; }
+function py(j){ return MARGIN + j*STEP; }
+
+function elevColor(e, lo, hi){
+  // hypsometric-ish scale: teal-green low -> mustard mid -> rust high
+  const t = Math.max(0, Math.min(1, (e-lo)/(hi-lo || 1)));
+  const stops = [
+    [44,120,115],  // teal
+    [201,151,58],  // mustard
+    [181,80,45]    // rust
+  ];
+  let seg = t*(stops.length-1);
+  let idx = Math.min(stops.length-2, Math.floor(seg));
+  let f = seg - idx;
+  const a = stops[idx], b = stops[idx+1];
+  const c = a.map((v,k)=> Math.round(v + (b[k]-v)*f));
+  return `rgb(${c[0]},${c[1]},${c[2]})`;
+}
+
+function gridBounds(g){
+  let lo=Infinity, hi=-Infinity;
+  g.forEach(row=>row.forEach(v=>{lo=Math.min(lo,v);hi=Math.max(hi,v);}));
+  return [lo,hi];
+}
+
+// ---------- marching squares ----------
+function marchingSquares(grid, level){
+  const segs = [];
+  for(let j=0;j<N-1;j++){
+    for(let i=0;i<N-1;i++){
+      const tl = grid[j][i], tr = grid[j][i+1];
+      const bl = grid[j+1][i], br = grid[j+1][i+1];
+      const c = (tl>level?8:0)+(tr>level?4:0)+(br>level?2:0)+(bl>level?1:0);
+      if(c===0||c===15) continue;
+      const x0=px(i), x1=px(i+1), y0=py(j), y1=py(j+1);
+      const lerp=(a,b,va,vb)=> a + (b-a)*((level-va)/((vb-va)||1e-6));
+      const top    = [lerp(x0,x1,tl,tr), y0];
+      const right   = [x1, lerp(y0,y1,tr,br)];
+      const bottom = [lerp(x0,x1,bl,br), y1];
+      const left  = [x0, lerp(y0,y1,tl,bl)];
+      const table = {
+        1:[[left,bottom]], 2:[[bottom,right]], 3:[[left,right]],
+        4:[[top,right]], 5:[[left,top],[bottom,right]], 6:[[top,bottom]],
+        7:[[left,top]], 8:[[top,left]], 9:[[top,bottom]],
+        10:[[top,right],[left,bottom]], 11:[[top,right]], 12:[[right,left]],
+        13:[[right,bottom]], 14:[[bottom,left]]
+      };
+      const lines = table[c] || [];
+      lines.forEach(([p1,p2])=> segs.push({x1:p1[0],y1:p1[1],x2:p2[0],y2:p2[1]}));
+    }
+  }
+  return segs;
+}
+
+function contourLevels(g){
+  const [lo,hi] = gridBounds(g);
+  const levels = [];
+  const start = Math.ceil(lo);
+  for(let l=start; l<=hi; l+=1) levels.push(l);
+  return levels;
+}
+
+// ---------- render ----------
+function render(){
+  svg.innerHTML = '';
+  const ns = 'http://www.w3.org/2000/svg';
+  const g = document.createElementNS(ns,'g');
+  svg.appendChild(g);
+
+  if(mode === 'cutfill'){
+    modeCaption.textContent = 'Comparing existing (dashed) to proposed (solid) — colored by cut/fill depth';
+    const [loE,hiE] = gridBounds(existing);
+    const [loP,hiP] = gridBounds(proposed);
+    const lo = Math.min(loE,loP), hi = Math.max(hiE,hiP);
+    const maxDiff = Math.max(1, ...existing.flatMap((row,j)=>row.map((v,i)=>Math.abs(v-proposed[j][i]))));
+
+    // cell tint by average corner diff
+    for(let j=0;j<N-1;j++){
+      for(let i=0;i<N-1;i++){
+        const corners = [[i,j],[i+1,j],[i,j+1],[i+1,j+1]];
+        const diff = corners.reduce((s,[ci,cj])=> s+(existing[cj][ci]-proposed[cj][ci]),0)/4;
+        const t = Math.min(1, Math.abs(diff)/maxDiff);
+        const color = diff > 0 ? '181,80,45' : '44,120,115'; // rust cut, teal fill
+        const rect = document.createElementNS(ns,'rect');
+        rect.setAttribute('x', px(i)); rect.setAttribute('y', py(j));
+        rect.setAttribute('width', STEP); rect.setAttribute('height', STEP);
+        rect.setAttribute('fill', `rgba(${color},${0.12+t*0.55})`);
+        rect.setAttribute('stroke', 'rgba(36,49,41,0.08)');
+        g.appendChild(rect);
+      }
+    }
+
+    // existing dashed contours
+    contourLevels(existing).forEach(level=>{
+      marchingSquares(existing, level).forEach(s=>{
+        const l = document.createElementNS(ns,'line');
+        l.setAttribute('x1',s.x1);l.setAttribute('y1',s.y1);
+        l.setAttribute('x2',s.x2);l.setAttribute('y2',s.y2);
+        l.setAttribute('stroke','#243129'); l.setAttribute('stroke-width','1');
+        l.setAttribute('stroke-dasharray','4 3'); l.setAttribute('opacity','0.55');
+        g.appendChild(l);
+      });
+    });
+    // proposed solid contours
+    contourLevels(proposed).forEach(level=>{
+      marchingSquares(proposed, level).forEach(s=>{
+        const l = document.createElementNS(ns,'line');
+        l.setAttribute('x1',s.x1);l.setAttribute('y1',s.y1);
+        l.setAttribute('x2',s.x2);l.setAttribute('y2',s.y2);
+        l.setAttribute('stroke','#243129'); l.setAttribute('stroke-width','1.6');
+        g.appendChild(l);
+      });
+    });
+
+    legendBox.innerHTML = `
+      <div><span class="swatch" style="background:var(--rust)"></span>Cut — material removed</div>
+      <div><span class="swatch" style="background:var(--teal)"></span>Fill — material added</div>
+      <div><span class="swatch" style="background:transparent;border:1px dashed #243129"></span>Existing contour</div>
+      <div><span class="swatch" style="background:transparent;border:1px solid #243129"></span>Proposed contour</div>
+    `;
+    selCaption.textContent = '';
+  } else {
+    const g_ = mode === 'existing' ? existing : proposed;
+    modeCaption.textContent = mode === 'existing'
+      ? 'Editing existing terrain — drag a point vertically to change elevation'
+      : 'Editing proposed grading — drag a point vertically to change elevation';
+    const [lo,hi] = gridBounds(g_);
+
+    // grid lines
+    for(let j=0;j<N;j++){
+      for(let i=0;i<N-1;i++){
+        const l = document.createElementNS(ns,'line');
+        l.setAttribute('x1',px(i)); l.setAttribute('y1',py(j));
+        l.setAttribute('x2',px(i+1)); l.setAttribute('y2',py(j));
+        l.setAttribute('stroke','#C9BF9E'); l.setAttribute('stroke-width','1');
+        g.appendChild(l);
+      }
+    }
+    for(let i=0;i<N;i++){
+      for(let j=0;j<N-1;j++){
+        const l = document.createElementNS(ns,'line');
+        l.setAttribute('x1',px(i)); l.setAttribute('y1',py(j));
+        l.setAttribute('x2',px(i)); l.setAttribute('y2',py(j+1));
+        l.setAttribute('stroke','#C9BF9E'); l.setAttribute('stroke-width','1');
+        g.appendChild(l);
+      }
+    }
+
+    // contours
+    contourLevels(g_).forEach(level=>{
+      marchingSquares(g_, level).forEach(s=>{
+        const l = document.createElementNS(ns,'line');
+        l.setAttribute('x1',s.x1);l.setAttribute('y1',s.y1);
+        l.setAttribute('x2',s.x2);l.setAttribute('y2',s.y2);
+        l.setAttribute('stroke','#243129'); l.setAttribute('stroke-width','1.3'); l.setAttribute('opacity','0.75');
+        g.appendChild(l);
+      });
+    });
+
+    // points
+    for(let j=0;j<N;j++){
+      for(let i=0;i<N;i++){
+        const c = document.createElementNS(ns,'circle');
+        c.setAttribute('cx', px(i)); c.setAttribute('cy', py(j));
+        c.setAttribute('r', 7);
+        c.setAttribute('fill', elevColor(g_[j][i], lo, hi));
+        c.setAttribute('stroke', '#F7F3E8');
+        c.setAttribute('stroke-width', '1.5');
+        c.classList.add('pt');
+        if(selected && selected.i===i && selected.j===j) c.classList.add('selected');
+        c.dataset.i = i; c.dataset.j = j;
+        c.addEventListener('mousedown', startDrag);
+        c.addEventListener('touchstart', startDrag, {passive:false});
+        g.appendChild(c);
+      }
+    }
+
+    legendBox.innerHTML = `
+      <div><span class="swatch" style="background:${elevColor(lo,lo,hi)}"></span>Low — ${lo.toFixed(1)} ft</div>
+      <div><span class="swatch" style="background:${elevColor((lo+hi)/2,lo,hi)}"></span>Mid</div>
+      <div><span class="swatch" style="background:${elevColor(hi,lo,hi)}"></span>High — ${hi.toFixed(1)} ft</div>
+    `;
+    selCaption.textContent = selected ? `point (${selected.i},${selected.j})` : '';
+  }
+
+  updateReadout();
+  updateStats();
+}
+
+// ---------- dragging ----------
+let dragging = null;
+function startDrag(evt){
+  evt.preventDefault();
+  const i = +evt.currentTarget.dataset.i, j = +evt.currentTarget.dataset.j;
+  selected = {i,j};
+  if(mode !== 'cutfill'){
+    dragging = { i, j, startY: (evt.touches? evt.touches[0].clientY : evt.clientY),
+                 startVal: (mode==='existing'?existing:proposed)[j][i] };
+    window.addEventListener('mousemove', onDrag);
+    window.addEventListener('touchmove', onDrag, {passive:false});
+    window.addEventListener('mouseup', endDrag);
+    window.addEventListener('touchend', endDrag);
+  }
+  render();
+}
+function onDrag(evt){
+  if(!dragging) return;
+  evt.preventDefault();
+  const y = evt.touches ? evt.touches[0].clientY : evt.clientY;
+  const dy = dragging.startY - y; // up = positive
+  const deltaFt = Math.round((dy/10)*2)/2; // 10px per 0.5 ft, snapped
+  const newVal = Math.max(-10, Math.min(20, dragging.startVal + deltaFt));
+  const g_ = mode==='existing' ? existing : proposed;
+  g_[dragging.j][dragging.i] = newVal;
+  render();
+}
+function endDrag(){
+  dragging = null;
+  window.removeEventListener('mousemove', onDrag);
+  window.removeEventListener('touchmove', onDrag);
+  window.removeEventListener('mouseup', endDrag);
+  window.removeEventListener('touchend', endDrag);
+}
+
+// ---------- stats ----------
+function updateStats(){
+  const cellArea = CELL_FT*CELL_FT; // sq ft
+  let cutVol=0, fillVol=0;
+  for(let j=0;j<N-1;j++){
+    for(let i=0;i<N-1;i++){
+      const corners=[[i,j],[i+1,j],[i,j+1],[i+1,j+1]];
+      const diff = corners.reduce((s,[ci,cj])=> s+(existing[cj][ci]-proposed[cj][ci]),0)/4;
+      const vol = diff*cellArea; // cu ft, +cut / -fill
+      if(vol>0) cutVol += vol; else fillVol += -vol;
+    }
+  }
+  const cutCY = cutVol/27, fillCY = fillVol/27;
+  document.getElementById('statCut').textContent = cutCY.toFixed(1)+' cy';
+  document.getElementById('statFill').textContent = fillCY.toFixed(1)+' cy';
+  const net = cutCY - fillCY;
+  const netEl = document.getElementById('statNet');
+  netEl.textContent = (net>=0?'+':'')+net.toFixed(1)+' cy';
+  netEl.style.color = Math.abs(net)<0.5 ? 'var(--ink)' : (net>0?'var(--rust)':'var(--teal)');
+}
+
+function updateReadout(){
+  if(!selected){ readout.innerHTML = 'Click a point on the grid to select it.'; return; }
+  const {i,j} = selected;
+  readout.innerHTML = `Point (${i}, ${j})<br>Existing: <b>${existing[j][i].toFixed(1)} ft</b><br>Proposed: <b>${proposed[j][i].toFixed(1)} ft</b>`;
+}
+
+// ---------- controls ----------
+document.querySelectorAll('.modes button').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.modes button').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    mode = btn.dataset.mode;
+    render();
+  });
+});
+
+document.getElementById('stepUp').addEventListener('click', ()=>{
+  if(!selected || mode==='cutfill') return;
+  const g_ = mode==='existing'?existing:proposed;
+  g_[selected.j][selected.i] = Math.min(20, g_[selected.j][selected.i]+0.5);
+  render();
+});
+document.getElementById('stepDown').addEventListener('click', ()=>{
+  if(!selected || mode==='cutfill') return;
+  const g_ = mode==='existing'?existing:proposed;
+  g_[selected.j][selected.i] = Math.max(-10, g_[selected.j][selected.i]-0.5);
+  render();
+});
+
+document.getElementById('btnFlatten').addEventListener('click', ()=>{
+  const target = existing[Math.floor(N/2)][Math.floor(N/2)];
+  for(let j=1;j<N-1;j++){
+    for(let i=1;i<N-1;i++){
+      proposed[j][i] = target;
+    }
+  }
+  if(mode==='proposed'||mode==='cutfill') render(); else render();
+});
+document.getElementById('btnReset').addEventListener('click', ()=>{
+  proposed = existing.map(r=>r.slice());
+  render();
+});
+
+render();
+</script>
+</body>
+</html>
